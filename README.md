@@ -1,6 +1,6 @@
 # Pidge: Trust Instinct
 
-<img src="public/pidge.svg" width="72" alt="Pidge the homing pigeon" align="right" />
+![Pidge: Trust Instinct. Instinct, self-hosted. Text it on iMessage. You own the agent and connections.](docs/cover.png)
 
 Pidge is a self-hosted personal assistant you text over iMessage or use through web chat. It can read connected apps, research public websites, attempt guest browser errands, and send scheduled iMessage reports.
 
