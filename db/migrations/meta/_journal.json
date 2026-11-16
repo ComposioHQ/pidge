@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1793820545982,
+      "tag": "0000_phase1",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793822888958,
+      "tag": "0001_phase2_action_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793825290612,
+      "tag": "0002_phase3_browser",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793838093340,
+      "tag": "0003_phase4_schedules",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793847176569,
+      "tag": "0004_phase4_approval_guards",
+      "breakpoints": true
+    }
+  ]
+}

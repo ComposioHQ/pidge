@@ -1,0 +1,18 @@
+/** Pidge the homing pigeon. Decorative; pages always state status in text as well. */
+export function Mascot({ size = 64, mood = "home" }: { size?: number; mood?: "home" | "out" | "lost" }) {
+  const label = mood === "out" ? "Pidge is out" : mood === "lost" ? "Pidge got lost" : "Pidge";
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label={label}>
+      <title>{label}</title>
+      <ellipse cx="34" cy="40" rx="20" ry="15" fill="#9aa5b8" />
+      <path d="M18 40c4-10 18-14 28-8-6 1-12 6-14 12-5-1-10-2-14-4z" fill="#7d889c" />
+      <circle cx="22" cy="24" r="11" fill="#8a95a9" />
+      <path d="M16 31c4 4 10 5 15 3l1 6c-6 2-12 0-16-3z" fill="#5fa58f" />
+      <circle cx="19" cy="22" r="2.6" fill="#fff" />
+      <circle cx="18.6" cy="22" r="1.4" fill={mood === "lost" ? "#b33" : "#1d2330"} />
+      <path d="M11 24l-6 2 6 1.6z" fill="#e8a33d" />
+      <path d="M30 55l-2 6M38 55l2 6" stroke="#e8a33d" strokeWidth="2.4" strokeLinecap="round" />
+      {mood === "out" ? <path d="M50 22l8-6M52 28l9-2" stroke="#9aa5b8" strokeWidth="2" strokeLinecap="round" /> : null}
+    </svg>
+  );
+}

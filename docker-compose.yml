@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pidge
+      POSTGRES_PASSWORD: pidge
+      POSTGRES_DB: pidge
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pidge-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pidge"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pidge-postgres:

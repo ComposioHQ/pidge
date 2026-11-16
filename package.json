@@ -1,0 +1,59 @@
+{
+  "name": "pidge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pidge: Trust Instinct. An open-source iMessage personal assistant built on Eve, Photon, and Composio.",
+  "license": "MIT",
+  "homepage": "https://github.com/ComposioHQ/pidge#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ComposioHQ/pidge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ComposioHQ/pidge/issues"
+  },
+  "type": "module",
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env.local node_modules/next/dist/bin/next dev",
+    "build": "eve build && next build",
+    "start": "node --env-file-if-exists=.env.local node_modules/next/dist/bin/next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file-if-exists=.env.local scripts/migrate.ts",
+    "setup:owner": "tsx --env-file-if-exists=.env.local scripts/setup-owner.ts",
+    "release:check": "node scripts/check-release.mjs"
+  },
+  "dependencies": {
+    "@composio/core": "0.28.0",
+    "@composio/experimental": "0.2.8",
+    "ai": "7.0.162",
+    "better-auth": "1.7.17",
+    "croner": "^9.1.0",
+    "drizzle-orm": "0.45.4",
+    "eve": "0.83.3",
+    "next": "16.4.5",
+    "postgres": "4.0.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "server-only": "0.0.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.5",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "drizzle-kit": "0.31.11",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
+  }
+}

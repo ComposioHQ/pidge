@@ -1,0 +1,2 @@
+# Private audit and history remain local when preparing the public source snapshot.
+RELEASE-AUDIT.md export-ignore
