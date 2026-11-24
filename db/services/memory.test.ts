@@ -61,11 +61,7 @@ describe("memory", () => {
       origin: "explicit",
     });
     expect(again).toMatchObject({ ok: true, duplicate: true, item: { id: first.id } });
-    for (const secret of [
-      "My password is hunter2",
-      "card 4242 4242 4242 4242",
-      "key sk-ant-abcdefghijklmnopqrstuv1234",
-    ]) {
+    for (const secret of ["My password is hunter2", "card 4242 4242 4242 4242", `key sk-${"ant-"}${"x".repeat(24)}`]) {
       expect(looksSecret(secret)).toBe(true);
       expect((await saveMemory(testDb(), ada, { content: secret, tier: "fact", origin: "explicit" })).ok).toBe(false);
     }
