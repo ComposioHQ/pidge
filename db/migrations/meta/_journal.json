@@ -50,6 +50,13 @@
       "when": 1795558333426,
       "tag": "0006_memory_safety",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795558752802,
+      "tag": "0007_app_event_triggers",
+      "breakpoints": true
     }
   ]
 }

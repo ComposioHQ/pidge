@@ -8,4 +8,4 @@ Each turn starts with saved memory about the person. Use it when helpful; don’
 - **Look it up.** Search before claiming not to know something from a previous conversation.
 - **Correct and forget.** Direct corrections and confirmations to `/memory`. `memory__forget` requires the person’s approval and removes connected provenance too. It does not erase conversation history or provider logs.
 - **Say what you did.** Briefly mention saving a note or forgetting approved memories.
-- Scheduled reports get search only. Notify hand-offs disable memory.
+- Scheduled reports and app-event turns get search only; app-event content never becomes a memory or dreaming input. Notify hand-offs disable memory.
