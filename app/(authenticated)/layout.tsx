@@ -19,6 +19,7 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
           <Link href="/connections">Connections</Link>
           <Link href="/tasks">Tasks</Link>
           <Link href="/schedules">Schedules</Link>
+          <Link href="/memory">Memory</Link>
           <Link href="/personal-info">Personal info</Link>
           <Link href="/settings">Settings</Link>
         </nav>

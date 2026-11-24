@@ -46,6 +46,17 @@ Public sign-up is disabled. Text your configured Photon line, follow its single-
 
 [The spec](docs/spec.md) describes the wider design. [Decisions](docs/decisions.md) records what changed. Sanitized [spike findings](docs/spike.md) and [MVP verification](docs/mvp-verification.md) are historical evidence, not guarantees for new accounts. Use the [independent release rehearsal](docs/release-rehearsal.md) to validate your deployment.
 
+## Memory and dreaming
+
+Pidge keeps a per-person memory in PostgreSQL. It needs no extra service or configuration beyond `pnpm db:migrate`.
+
+- **Long-term facts** load into the model context at the start of every turn (up to 40, explicit ones first). A fact is either *explicit* (the person said it, asked Pidge to remember it, or typed it on `/memory`) or *inferred* (dreamed from notes).
+- **Notes** are dated observations Pidge saves when it notices something the person didn't ask it to keep. They don't load every turn. Pidge finds them by keyword search: through the `memory__search` tool, and automatically when a note matches the new message.
+- **Dreaming** runs hourly and, for each person whose local time is 3 a.m., condenses up to 50 new notes into short facts with the person's chosen model. Each dreamed fact records the notes it came from. Dreaming can replace an inferred fact, never an explicit one.
+- **`/memory`** lists facts with where they came from, searches everything, and lets the person correct or forget one item, forget everything, or dream now.
+
+Forgetting erases the text in Pidge's database, along with the notes a fact was built from and any fact dreamed from a forgotten note. Pidge also refuses to re-infer the exact text of something forgotten. It does not erase Eve conversation history or provider logs. Pidge refuses to store text that looks like a password, code, key, or card number. See [D17](docs/decisions.md#d17-searchable-memory-and-dreaming-in-postgresql).
+
 ## Optional owner notifications
 
 Set `PIDGE_NOTIFY_TOKEN` to a random bearer token to let a trusted service send the owner a message. Leave it unset to disable both notification paths. The token grants owner messaging access. Keep it in server configuration and an authorization header, never in a URL or client code.
@@ -66,8 +77,8 @@ Text is limited to 2,000 characters and request bodies to 16 KiB. Responses are 
 ## Where your data goes
 
 - Photon carries iMessage text and attachments through its managed infrastructure.
-- AI Gateway and the selected model provider receive conversation content, instructions, and tool results. Exa receives web search queries.
+- AI Gateway and the selected model provider receive conversation content, instructions, tool results, recalled memory, and the notes sent for nightly dreaming. Exa receives web search queries.
 - Composio holds connected app credentials and executes app actions. Its hosted browser receives errand instructions and, for an approved guest booking, contact fields from Personal info.
-- Your server stores accounts, identity links, personal info, conversation bindings, browser task records, schedules, action metadata, and artifacts. Eve stores conversation history and execution state on local disk. `.env.local` contains server credentials.
+- Your server stores accounts, identity links, personal info, memory facts and notes, conversation bindings, browser task records, schedules, action metadata, and artifacts. Eve stores conversation history and execution state on local disk. `.env.local` contains server credentials.
 
 Self-hosting does not keep all data on your machine. Review each provider's terms and retention settings before connecting sensitive accounts.
