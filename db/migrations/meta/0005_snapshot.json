@@ -1,5 +1,5 @@
 {
-  "id": "e0249a22-8181-426f-9f5f-037c2cbaae62",
+  "id": "69fc44f9-f4bf-43ed-af39-6f325b2740c7",
   "prevId": "96c5882e-68d0-48df-bc11-66d1fbd76792",
   "version": "7",
   "dialect": "postgresql",
@@ -1708,142 +1708,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.app_event_runs": {
-      "name": "app_event_runs",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "subscription_id": {
-          "name": "subscription_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "turn_id": {
-          "name": "turn_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "event_id": {
-          "name": "event_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "attempts": {
-          "name": "attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "retry_at": {
-          "name": "retry_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "app_event_runs_event": {
-          "name": "app_event_runs_event",
-          "columns": [
-            {
-              "expression": "subscription_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "app_event_runs_due": {
-          "name": "app_event_runs_due",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "retry_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "app_event_runs_subscription_id_app_event_subscriptions_id_fk": {
-          "name": "app_event_runs_subscription_id_app_event_subscriptions_id_fk",
-          "tableFrom": "app_event_runs",
-          "tableTo": "app_event_subscriptions",
-          "columnsFrom": [
-            "subscription_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.app_event_subscriptions": {
-      "name": "app_event_subscriptions",
+    "public.memory_items": {
+      "name": "memory_items",
       "schema": "",
       "columns": {
         "id": {
@@ -1859,62 +1725,14 @@
           "primaryKey": false,
           "notNull": true
         },
-        "request_key": {
-          "name": "request_key",
+        "tier": {
+          "name": "tier",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "eve_session_id": {
-          "name": "eve_session_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "conversation": {
-          "name": "conversation",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "handle": {
-          "name": "handle",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "connected_account_id": {
-          "name": "connected_account_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "toolkit": {
-          "name": "toolkit",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "trigger_slug": {
-          "name": "trigger_slug",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "trigger_id": {
-          "name": "trigger_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "config": {
-          "name": "config",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "instruction": {
-          "name": "instruction",
+        "origin": {
+          "name": "origin",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -1923,7 +1741,49 @@
           "name": "status",
           "type": "text",
           "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
           "notNull": true
+        },
+        "eve_session_id": {
+          "name": "eve_session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_ids": {
+          "name": "source_ids",
+          "type": "uuid[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::uuid[]"
+        },
+        "search": {
+          "name": "search",
+          "type": "tsvector",
+          "primaryKey": false,
+          "notNull": false,
+          "generated": {
+            "as": "to_tsvector('english', coalesce(content, ''))",
+            "type": "stored"
+          }
         },
         "created_at": {
           "name": "created_at",
@@ -1931,14 +1791,33 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {
-        "app_event_subscriptions_user": {
-          "name": "app_event_subscriptions_user",
+        "memory_items_user": {
+          "name": "memory_items_user",
           "columns": [
             {
               "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "tier",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1949,33 +1828,26 @@
           "method": "btree",
           "with": {}
         },
-        "app_event_subscriptions_account_type": {
-          "name": "app_event_subscriptions_account_type",
+        "memory_items_search": {
+          "name": "memory_items_search",
           "columns": [
             {
-              "expression": "connected_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "trigger_slug",
+              "expression": "search",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
-          "isUnique": true,
-          "where": "\"app_event_subscriptions\".\"status\" <> 'removed'",
+          "isUnique": false,
           "concurrently": false,
-          "method": "btree",
+          "method": "gin",
           "with": {}
         }
       },
       "foreignKeys": {
-        "app_event_subscriptions_user_id_user_id_fk": {
-          "name": "app_event_subscriptions_user_id_user_id_fk",
-          "tableFrom": "app_event_subscriptions",
+        "memory_items_user_id_user_id_fk": {
+          "name": "memory_items_user_id_user_id_fk",
+          "tableFrom": "memory_items",
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
@@ -1988,22 +1860,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "app_event_subscriptions_request_key_unique": {
-          "name": "app_event_subscriptions_request_key_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "request_key"
-          ]
-        },
-        "app_event_subscriptions_trigger_id_unique": {
-          "name": "app_event_subscriptions_trigger_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "trigger_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

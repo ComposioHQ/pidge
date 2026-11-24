@@ -40,8 +40,15 @@
     {
       "idx": 5,
       "version": "7",
-      "when": 1795557383017,
-      "tag": "0005_app_event_triggers",
+      "when": 1795557297625,
+      "tag": "0005_memory",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795558183399,
+      "tag": "0006_app_event_triggers",
       "breakpoints": true
     }
   ]

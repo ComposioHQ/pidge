@@ -13,7 +13,7 @@ export function testDb(): Database {
 /** Empties every application and auth table between tests. */
 export async function resetDb(): Promise<void> {
   await testDb().execute(
-    sql`truncate table approval_guards, scheduled_runs, scheduled_jobs, browser_task_runs, browser_tasks, personal_info, action_audit, artifacts, conversation_bindings, identity_link_tokens, channel_identities, settings, account, session, verification, "user" cascade`,
+    sql`truncate table app_event_runs, app_event_subscriptions, memory_items, approval_guards, scheduled_runs, scheduled_jobs, browser_task_runs, browser_tasks, personal_info, action_audit, artifacts, conversation_bindings, identity_link_tokens, channel_identities, settings, account, session, verification, "user" cascade`,
   );
 }
 
