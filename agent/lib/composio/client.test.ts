@@ -1,8 +1,16 @@
 import { EveProvider } from "@composio/experimental/eve";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { actionAudit } from "../../../db/schema";
+import {
+  activateSubscription,
+  claimEvents,
+  ingestEvent,
+  reserveSubscription,
+  startEvent,
+  stopSubscription,
+} from "../../../db/services/triggers";
 import { makeUser, resetDb, testDb } from "../../../test/db";
-import { webPrincipal } from "../identity/principal";
+import { triggerPrincipal, webPrincipal } from "../identity/principal";
 import { approvalPolicy, entryOutcomes, executeHook } from "./client";
 
 type HookArgs = Parameters<typeof executeHook>;
@@ -93,6 +101,55 @@ describe("Composio execute hook", () => {
       composioLogId: "log_1",
     });
     expect(JSON.stringify(rows)).not.toContain("secret plans");
+  });
+
+  it("keeps app-event writes behind the same approval guard and owner audit", async () => {
+    const alice = await makeUser("Alice");
+    const next = vi.fn(async () => ({ data: {}, error: null, successful: true }));
+    const subscription = await reserveSubscription(testDb(), {
+      userId: alice,
+      requestKey: "event-test",
+      eveSessionId: "wrun_test",
+      conversation: "thread-event",
+      handle: "+14155550100",
+      connectedAccountId: "ca_test",
+      toolkit: "gmail",
+      triggerSlug: "GMAIL_NEW_GMAIL_MESSAGE",
+      instruction: "Summarize it",
+      config: {},
+      status: "creating",
+    });
+    if (!subscription) throw new Error("no subscription");
+    await activateSubscription(testDb(), subscription.id, "ti_test");
+    await ingestEvent(testDb(), {
+      triggerId: "ti_test",
+      triggerSlug: "GMAIL_NEW_GMAIL_MESSAGE",
+      userId: alice,
+      connectedAccountId: "ca_test",
+      eventId: "log_test",
+      payload: {},
+    });
+    const [event] = await claimEvents(testDb());
+    if (!event) throw new Error("no event");
+    await startEvent(testDb(), event.run.id, alice, "wrun_test", "thread-event", "+14155550100", "turn_event");
+    const eventAuth = triggerPrincipal(alice, "thread-event", "+14155550100", event.run.id);
+    const denied = hookContext("GMAIL_SEND_EMAIL", { to: "a@example.com" }, eventAuth, "event-unapproved");
+    await executeHook(denied.ctx, next as never);
+    expect(next).not.toHaveBeenCalled();
+    const approved = hookContext("GMAIL_SEND_EMAIL", { to: "a@example.com" }, eventAuth, "event-approved");
+    expect(await approved.requestApproval()).toBe(true);
+    await executeHook(approved.ctx, next as never);
+    await executeHook(approved.ctx, next as never);
+    expect(next).toHaveBeenCalledOnce();
+    const rows = await testDb().select().from(actionAudit);
+    expect(rows.every((row) => row.userId === alice && row.approval === "required")).toBe(true);
+    expect(rows.filter((row) => row.outcome === "completed")).toHaveLength(1);
+    const parked = hookContext("GMAIL_SEND_EMAIL", {}, eventAuth, "event-then-disabled");
+    expect(await parked.requestApproval()).toBe(true);
+    await stopSubscription(testDb(), alice, subscription.id);
+    await executeHook(parked.ctx, next as never);
+    expect(next).toHaveBeenCalledOnce();
+    expect(parked.denied[0]).toContain("stopped or expired");
   });
 
   it("does not retry when the provider call throws", async () => {

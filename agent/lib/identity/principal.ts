@@ -11,6 +11,8 @@ export type PidgePrincipal =
       handle: string;
       /** Set only on turns the schedule dispatcher starts (spec §10.3 scheduled report). */
       scheduledRunId?: string;
+      /** Durable app-event run, issued only by the local event dispatcher. */
+      triggerRunId?: string;
       /** Set only on notify hand-offs (docs/decisions.md D14): text Pidge posts verbatim instead of running the model. */
       notifyText?: string;
     }
@@ -37,6 +39,21 @@ export function scheduledPrincipal(
     principalType: "user",
     principalId: userId,
     attributes: { channel: "imessage", conversation, handle, scheduledRunId },
+  };
+}
+
+/** Runs app-event work as its creator, with ordinary user tools and write approvals. */
+export function triggerPrincipal(
+  userId: string,
+  conversation: string,
+  handle: string,
+  triggerRunId: string,
+): SessionAuthContext {
+  return {
+    authenticator: PIDGE_AUTHENTICATOR,
+    principalType: "user",
+    principalId: userId,
+    attributes: { channel: "imessage", conversation, handle, triggerRunId },
   };
 }
 
@@ -70,10 +87,14 @@ export function webPrincipal(userId: string): SessionAuthContext {
  */
 export function readPrincipal(auth: SessionAuthContext | null | undefined): PidgePrincipal | null {
   if (!auth || auth.authenticator !== PIDGE_AUTHENTICATOR || auth.principalType !== "user") return null;
-  const { channel, conversation, handle, scheduledRunId, notifyText } = auth.attributes;
+  const { channel, conversation, handle, scheduledRunId, notifyText, triggerRunId } = auth.attributes;
   if (channel === "web") return { userId: auth.principalId, channel };
   if (channel === "imessage" && typeof conversation === "string" && typeof handle === "string") {
-    if (scheduledRunId !== undefined && notifyText !== undefined) return null;
+    if ([scheduledRunId, notifyText, triggerRunId].filter((value) => value !== undefined).length > 1) return null;
+    if (triggerRunId !== undefined) {
+      if (typeof triggerRunId !== "string" || triggerRunId.length === 0) return null;
+      return { userId: auth.principalId, channel, conversation, handle, triggerRunId };
+    }
     if (scheduledRunId !== undefined) {
       if (typeof scheduledRunId !== "string") return null;
       return { userId: auth.principalId, channel, conversation, handle, scheduledRunId };

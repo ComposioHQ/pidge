@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../../db/client";
 import { claimApprovedExecution, parkApproval } from "../../../db/services/approval-guards";
 import { type AuditEntry, recordActions } from "../../../db/services/audit";
+import { eventActive } from "../../../db/services/triggers";
 import { env } from "../../../shared/environment/env";
 import { readPrincipal } from "../identity/principal";
 import {
@@ -105,6 +106,13 @@ export const executeHook: EveHook = async (ctx, next) => {
   const session = ctx.context.eve.session;
   const principal = readPrincipal(session.auth.current);
   if (!principal) return ctx.deny("No authenticated Pidge user for this conversation.");
+  if (
+    principal.channel === "imessage" &&
+    principal.triggerRunId &&
+    !(await eventActive(db(), principal.triggerRunId, principal.userId))
+  ) {
+    return ctx.deny("This app-event run was stopped or expired. No action was run.");
+  }
   const slugs =
     ctx.request.slug.toUpperCase() === MULTI_EXECUTE
       ? multiExecuteSlugs(ctx.request.args)

@@ -55,9 +55,9 @@ export default defineWorkflowTool({
         ctx.reply({ status: "refused", error: "This browser errand belongs to someone else." });
         continue;
       }
-      if (principal.channel === "imessage" && principal.scheduledRunId) {
+      if (principal.channel === "imessage" && (principal.scheduledRunId || principal.triggerRunId)) {
         // spec §10.3: a scheduled report continues existing context; it starts no new browser work.
-        ctx.reply({ status: "refused", error: "Scheduled reports can't start browser errands." });
+        ctx.reply({ status: "refused", error: "Automated runs can't start browser errands." });
         continue;
       }
       owner = principal.userId;

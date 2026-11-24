@@ -2,6 +2,7 @@ import { defineHook } from "eve/hooks";
 import { db } from "../../db/client";
 import { claimConversation, deliveryAllowed, ownsConversation } from "../../db/services/conversations";
 import { markReporting, scheduledRunActive } from "../../db/services/schedules";
+import { eventActive, startEvent } from "../../db/services/triggers";
 import { readPrincipal } from "../lib/identity/principal";
 
 /**
@@ -45,6 +46,20 @@ export default defineHook({
         ctx.cancel();
         return;
       }
+      if (principal.channel === "imessage" && principal.triggerRunId) {
+        if (
+          !(await startEvent(
+            db(),
+            principal.triggerRunId,
+            principal.userId,
+            ctx.session.id,
+            principal.conversation,
+            principal.handle,
+            ctx.session.turn.id,
+          ))
+        )
+          ctx.cancel();
+      }
       if (principal.channel === "imessage" && principal.scheduledRunId) {
         if (!(await markReporting(db(), principal.scheduledRunId, principal.userId))) ctx.cancel();
       }
@@ -55,6 +70,9 @@ export default defineHook({
         console.warn("pidge.delivery_revoked", { sessionId: ctx.session.id });
         ctx.cancel();
         return;
+      }
+      if (principal.channel === "imessage" && principal.triggerRunId) {
+        if (!(await eventActive(db(), principal.triggerRunId, principal.userId))) ctx.cancel();
       }
       if (principal.channel === "imessage" && principal.scheduledRunId) {
         if (!(await scheduledRunActive(db(), principal.scheduledRunId, principal.userId))) {
