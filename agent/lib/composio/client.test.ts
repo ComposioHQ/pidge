@@ -144,6 +144,13 @@ describe("Composio execute hook", () => {
     const rows = await testDb().select().from(actionAudit);
     expect(rows.every((row) => row.userId === alice && row.approval === "required")).toBe(true);
     expect(rows.filter((row) => row.outcome === "completed")).toHaveLength(1);
+    const beforeRestart = hookContext("GMAIL_SEND_EMAIL", {}, eventAuth, "event-then-restart");
+    expect(await beforeRestart.requestApproval()).toBe(true);
+    simulateRestart();
+    await beforeRestart.requestApproval();
+    await executeHook(beforeRestart.ctx, next as never);
+    expect(next).toHaveBeenCalledOnce();
+    expect(beforeRestart.denied[0]).toContain("restarted");
     const parked = hookContext("GMAIL_SEND_EMAIL", {}, eventAuth, "event-then-disabled");
     expect(await parked.requestApproval()).toBe(true);
     await stopSubscription(testDb(), alice, subscription.id);

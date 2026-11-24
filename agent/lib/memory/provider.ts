@@ -29,7 +29,7 @@ function lockedOwner(ctx: { session: { auth: { current: Auth } }; memory: { scop
   return owner && ctx.memory.scope.value === owner.userId ? owner : null;
 }
 
-const isScheduledRun = (p: PidgePrincipal) => p.channel === "imessage" && Boolean(p.scheduledRunId);
+const isAutomatedRun = (p: PidgePrincipal) => p.channel === "imessage" && Boolean(p.scheduledRunId || p.triggerRunId);
 
 function line(item: MemoryView): string {
   const when = item.createdAt.toISOString().slice(0, 10);
@@ -141,8 +141,8 @@ export const pidgeMemory = defineMemoryProvider({
         return { results: (await searchMemory(db(), userId, query)).map(view) };
       },
     });
-    // Scheduled reports read memory but never change it (no person is present to confirm).
-    if (isScheduledRun(owner)) return { search };
+    // Scheduled and app-event turns cannot feed provider content into memory or change existing memories.
+    if (isAutomatedRun(owner)) return { search };
     return {
       search,
       save: defineTool({

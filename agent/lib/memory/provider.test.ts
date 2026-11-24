@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { saveMemory } from "../../../db/services/memory";
 import { makeUser, resetDb, testDb } from "../../../test/db";
-import { imessagePrincipal, notifyPrincipal, scheduledPrincipal, webPrincipal } from "../identity/principal";
+import {
+  imessagePrincipal,
+  notifyPrincipal,
+  scheduledPrincipal,
+  triggerPrincipal,
+  webPrincipal,
+} from "../identity/principal";
 import { pidgeMemory } from "./provider";
 
 const eveRoot = new URL("./", import.meta.resolve("eve"));
@@ -80,4 +86,12 @@ describe("pidge memory provider", () => {
     const t = await tools(scheduledPrincipal(ada, THREAD, "+14155550100", "run-1"), ada);
     expect(Object.keys(t ?? {})).toEqual(["search"]);
   });
+});
+
+it("gives app-event turns read-only memory", async () => {
+  await resetDb();
+  const ada = await makeUser("Ada");
+  expect(Object.keys((await tools(triggerPrincipal(ada, THREAD, "+14155550100", "event-run"), ada)) ?? {})).toEqual([
+    "search",
+  ]);
 });

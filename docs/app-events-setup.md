@@ -4,7 +4,7 @@ Use a dedicated Composio project for this Pidge deployment. Complete the existin
 
 ## Configure delivery
 
-1. Apply `pnpm db:migrate` against your deployment database. The `0005_app_event_triggers` migration adds `app_event_subscriptions` and `app_event_runs`.
+1. Apply `pnpm db:migrate` against your deployment database. Apply memory migrations `0005_memory` and `0006_memory_safety` first, then the `0007_app_event_triggers` migration adds `app_event_subscriptions` and `app_event_runs`.
 2. Give the deployment's Composio project key permission to read trigger types and instances and manage trigger instances. Keep the existing session and connected-account permissions.
 3. Inspect the project's current outbound webhook subscription in the Composio dashboard. If another application uses that subscription, use a separate project. Do not replace another application's destination.
 4. Register `https://YOUR_PUBLIC_HOST/api/triggers/composio` as the project's outbound webhook URL. Select payload version `V3` and event type `composio.trigger.message`. Use the dashboard or the documented `composio.webhooks.subscriptions` API. Provider ingress webhooks are a separate Composio setting.
@@ -28,7 +28,9 @@ The test database is dropped and recreated. Use a database with no wanted data.
 
 The synthetic commit includes an instruction to send secrets. The test keeps that text inside the untrusted event JSON and verifies that it cannot replace auth or the saved instruction. A stubbed final response demonstrates the intended output boundary. No model generates that response, and the test does not establish that a model will resist every prompt injection.
 
-`client.test.ts` checks that an event-triggered write still requires the existing approval guard, executes once, and stops if the subscription is disabled while approval is pending. The subscription tests mock Composio writes and also check that the installed SDK transport sends a failed creation request only once.
+`client.test.ts` checks that an event-triggered write still requires the existing approval guard, executes once, and stops if the subscription is disabled while approval is pending. The combined event test exercises Eve recall and durable memory callbacks, checks owner isolation, and refuses memory writes, correction, promotion, and deletion. Only preexisting inferred notes reach the mocked dreamer. Crash/replay and compaction tests restore serialized Eve state; forgetting a recalled item fails replay closed. The migration test compares empty and preexisting memory-0005 upgrade paths.
+
+The subscription tests mock Composio writes and also check that the installed SDK transport sends a failed creation request only once.
 
 ## Verify live after review and deployment
 

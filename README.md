@@ -50,7 +50,7 @@ Public sign-up is disabled. Text your configured Photon line, follow its single-
 
 Ask Pidge in iMessage to watch an event on one of your connected accounts and follow an instruction when it happens. For example, ask for a one-sentence summary and link whenever a commit lands in a repository. Pidge discovers available events, asks you to choose the account, and requests approval before setup. Results return to that conversation. You can list, disable, or remove subscriptions through chat.
 
-[Set up app events](docs/app-events-setup.md) covers the Composio V3 webhook and live verification. [App-event behavior](docs/app-events.md) covers retries, approvals, and limits. Event work can wait for the next minute dispatcher tick and the conversation queue. Future writes still require your approval.
+[Set up app events](docs/app-events-setup.md) covers the Composio V3 webhook and live verification. [App-event behavior](docs/app-events.md) covers retries, approvals, and limits. Event work can wait for the next minute dispatcher tick and the conversation queue. Future writes still require your approval. Event turns can recall and search the creator’s memory, but cannot save, confirm, correct, or forget it, and cannot add notes for dreaming.
 
 ## Memory and dreaming
 

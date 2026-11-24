@@ -38,6 +38,15 @@ it("migrates both an empty database and the original memory-0005 database withou
             ('00000000-0000-4000-8000-000000000001', 'fact', 'explicit', 'Synthetic fact.', 'synthetic-hash'),
             ('00000000-0000-4000-8000-000000000001', 'fact', 'inferred', 'Synthetic fact.', 'synthetic-hash')`;
         }
+        if (incremental) {
+          // Commit the complete memory PR first, then upgrade that already-migrated database to the trigger stack.
+          const memoryEntries = journal.entries.filter((entry: { idx: number }) => entry.idx <= 6);
+          await writeFile(join(original, "meta/_journal.json"), JSON.stringify({ ...journal, entries: memoryEntries }));
+          for (const entry of memoryEntries)
+            await copyFile(join(folder, `${entry.tag}.sql`), join(original, `${entry.tag}.sql`));
+          await migrate(db, { migrationsFolder: original });
+          expect(await sql`select to_regclass('public.app_event_runs') as events`).toEqual([{ events: null }]);
+        }
         await migrate(db, { migrationsFolder: folder });
         await migrate(db, { migrationsFolder: folder }); // repeated deployment is a no-op
         if (incremental) {
