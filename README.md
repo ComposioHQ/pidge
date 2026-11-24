@@ -12,7 +12,7 @@ Pidge is a self-hosted personal assistant you text over iMessage or use through 
 - Photon Stable / Spectrum Cloud connects iMessage directly through Eve's official Photon channel at `/eve/v1/photon`. Composio is outside that messaging path.
 - Composio Sessions discovers app tools, connects each user's accounts, and executes app actions. Pidge uses `@composio/experimental/eve`.
 - Pidge's `run_browser` tool uses Composio's hosted `browser_tool`, billed through Composio Instant. It supports guest errands, with a 25-step provider bound. That bound is not a dollar spending cap.
-- Next.js serves web chat and Better Auth email/password login. PostgreSQL stores application data. A minute dispatcher starts iMessage schedule runs.
+- Next.js serves web chat and Better Auth email/password login. PostgreSQL stores application data. A minute dispatcher starts iMessage schedule runs and work from signed app events.
 - Vercel AI Gateway supplies models and Exa public web search.
 
 Eve is pinned to `0.83.3` because the pinned Composio Eve provider uses the older `defineDynamic({ events })` API. Eve `0.84.0` changed that API. Upgrading Eve alone breaks the integration. The provider also stays external to Eve's build to preserve its tool behavior. See [decision D2](docs/decisions.md#d2-pin-eve0833-not-the-latest-eve) for the evidence and upgrade checks. An Undici `8.12.2` override patches Eve's HTTP dependency without changing the Eve API.
@@ -37,7 +37,7 @@ Public sign-up is disabled. Text your configured Photon line, follow its single-
 ## Current limits
 
 - Run exactly one app process. PostgreSQL, artifacts, and Eve's local workflow store must survive restarts. Ephemeral hosting and multiple replicas are unsupported.
-- Owner setup is through the server console. Invitations, general multi-user onboarding, app triggers, account deletion/export, and the Phase 5/6 work in the original spec are deferred.
+- Owner setup is through the server console. Invitations, general multi-user onboarding, account deletion/export, and the Phase 5/6 work in the original spec are deferred.
 - iMessage supports direct conversations. Group chats are rejected. HEIC photos are converted to JPEG (primary still only). Images over 3 MiB or 8,000 pixels per side, and videos (including Live Photo motion), are rejected with a note asking for a smaller copy or a description.
 - Schedules deliver through iMessage. Missed occurrences coalesce after downtime. Approval parked before a restart fails closed and needs a new request.
 - Browser errands support guest flows. Signed-in browser vaults, 1Password, and the original Browser Use cost ledger are deferred. Some sites block hosted browsers or need manual verification.
@@ -45,6 +45,23 @@ Public sign-up is disabled. Text your configured Photon line, follow its single-
 - `pnpm audit` reports one moderate advisory ([GHSA-67mh-4wv8-2f99](https://github.com/advisories/GHSA-67mh-4wv8-2f99)) in the `esbuild@0.18` that `drizzle-kit` uses for migrations tooling. It affects esbuild's development server, which Pidge never starts. The latest stable `drizzle-kit` still depends on it.
 
 [The spec](docs/spec.md) describes the wider design. [Decisions](docs/decisions.md) records what changed. Sanitized [spike findings](docs/spike.md) and [MVP verification](docs/mvp-verification.md) are historical evidence, not guarantees for new accounts. Use the [independent release rehearsal](docs/release-rehearsal.md) to validate your deployment.
+
+## App-event work
+
+Ask Pidge in iMessage to watch an event on one of your connected accounts and follow an instruction when it happens. For example, ask for a one-sentence summary and link whenever a commit lands in a repository. Pidge discovers available events, asks you to choose the account, and requests approval before setup. Results return to that conversation. You can list, disable, or remove subscriptions through chat.
+
+[Set up app events](docs/app-events-setup.md) covers the Composio V3 webhook and live verification. [App-event behavior](docs/app-events.md) covers retries, approvals, and limits. Event work can wait for the next minute dispatcher tick and the conversation queue. Future writes still require your approval. Event turns can recall and search the creator’s memory, but cannot save, confirm, correct, or forget it, and cannot add notes for dreaming.
+
+## Memory and dreaming
+
+Pidge keeps a per-person memory in PostgreSQL. It needs no extra service or configuration beyond `pnpm db:migrate`.
+
+- **Long-term facts** load into the model context at the start of every turn (up to 40, explicit ones first). A fact is either *explicit* (the person added or corrected it through authenticated `/memory` actions) or *inferred* (dreamed from notes).
+- **Notes** are dated observations Pidge saves as unconfirmed inferences, even when a model thinks the person explicitly said something. They don't load every turn. Pidge finds them by keyword search: through the `memory__search` tool, and automatically when a note matches the new message.
+- **Dreaming** runs hourly and, for each person whose local time is 3 a.m., condenses up to 50 new notes into short facts with the person's chosen model. Each dreamed fact records the notes it came from. Dreaming can replace an inferred fact, never an explicit one.
+- **`/memory`** lists facts with where they came from, searches everything, and lets the person correct or forget one item, forget everything, or dream now.
+
+Forgetting erases the text in Pidge's database, across the complete connected provenance component, including old sources and sibling inferences. Pidge also refuses to re-infer the exact text of something forgotten. It does not erase Eve conversation history or provider logs. Heuristic checks refuse common password, code, key, and card patterns; they cannot identify every secret. Automatic notes and dreamed facts remain unconfirmed data. Dreaming leases a user’s batch before calling the model. Recall replay reuses references to its original items; if one was forgotten, the turn fails closed and needs a fresh message. See [D17](docs/decisions.md#d17-searchable-memory-and-dreaming-in-postgresql).
 
 ## Optional owner notifications
 
@@ -66,8 +83,8 @@ Text is limited to 2,000 characters and request bodies to 16 KiB. Responses are 
 ## Where your data goes
 
 - Photon carries iMessage text and attachments through its managed infrastructure.
-- AI Gateway and the selected model provider receive conversation content, instructions, and tool results. Exa receives web search queries.
+- AI Gateway and the selected model provider receive conversation content, instructions, tool results, recalled memory, and the notes sent for nightly dreaming. Exa receives web search queries.
 - Composio holds connected app credentials and executes app actions. Its hosted browser receives errand instructions and, for an approved guest booking, contact fields from Personal info.
-- Your server stores accounts, identity links, personal info, conversation bindings, browser task records, schedules, action metadata, and artifacts. Eve stores conversation history and execution state on local disk. `.env.local` contains server credentials.
+- Your server stores accounts, identity links, personal info, memory facts and notes, conversation bindings, browser task records, schedules, app-event subscriptions and pending payloads, action metadata, and artifacts. Eve stores conversation history and execution state on local disk. `.env.local` contains server credentials.
 
 Self-hosting does not keep all data on your machine. Review each provider's terms and retention settings before connecting sensitive accounts.

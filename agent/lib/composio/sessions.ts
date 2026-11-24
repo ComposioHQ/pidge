@@ -109,7 +109,7 @@ export async function resolveConversationTools(context: {
   const principal = readPrincipal(context.session.auth.current);
   if (!principal) return empty;
   const source = await conversationSource(context.session.id, principal.userId);
-  if (principal.channel !== "imessage" || !principal.scheduledRunId) return source;
+  if (principal.channel !== "imessage" || (!principal.scheduledRunId && !principal.triggerRunId)) return source;
   return {
     tools: async () => {
       const { [MANAGE_CONNECTIONS]: _admin, ...rest } = await source.tools();

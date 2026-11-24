@@ -24,6 +24,8 @@ const schema = z.object({
   DATABASE_URL: z.string().startsWith("postgres"),
   DATABASE_URL_UNPOOLED: z.string().startsWith("postgres").optional(),
   COMPOSIO_API_KEY: z.string().min(1),
+  /** V3 project webhook signing secret; unset disables app-event setup and intake. */
+  COMPOSIO_WEBHOOK_SECRET: z.string().optional(),
   COMPOSIO_TOOLKIT_ALLOWLIST: csv,
   COMPOSIO_TOOLKIT_DENYLIST: csv,
   IMESSAGE_PROJECT_ID: z.string().min(1),

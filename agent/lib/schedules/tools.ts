@@ -48,8 +48,8 @@ export function toCadence(input: z.infer<typeof cadenceSchema>): Cadence {
 export function scheduleManager(auth: Auth): { ok: true; principal: PidgePrincipal } | { ok: false; error: string } {
   const principal = readPrincipal(auth);
   if (!principal) return { ok: false, error: "Not signed in." };
-  if (principal.channel === "imessage" && principal.scheduledRunId) {
-    return { ok: false, error: "Scheduled reports can't create or change schedules." };
+  if (principal.channel === "imessage" && (principal.scheduledRunId || principal.triggerRunId)) {
+    return { ok: false, error: "Automated runs can't create or change schedules." };
   }
   return { ok: true, principal };
 }
