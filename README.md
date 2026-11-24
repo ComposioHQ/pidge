@@ -56,12 +56,12 @@ Ask Pidge in iMessage to watch an event on one of your connected accounts and fo
 
 Pidge keeps a per-person memory in PostgreSQL. It needs no extra service or configuration beyond `pnpm db:migrate`.
 
-- **Long-term facts** load into the model context at the start of every turn (up to 40, explicit ones first). A fact is either *explicit* (the person said it, asked Pidge to remember it, or typed it on `/memory`) or *inferred* (dreamed from notes).
-- **Notes** are dated observations Pidge saves when it notices something the person didn't ask it to keep. They don't load every turn. Pidge finds them by keyword search: through the `memory__search` tool, and automatically when a note matches the new message.
+- **Long-term facts** load into the model context at the start of every turn (up to 40, explicit ones first). A fact is either *explicit* (the person added or corrected it through authenticated `/memory` actions) or *inferred* (dreamed from notes).
+- **Notes** are dated observations Pidge saves as unconfirmed inferences, even when a model thinks the person explicitly said something. They don't load every turn. Pidge finds them by keyword search: through the `memory__search` tool, and automatically when a note matches the new message.
 - **Dreaming** runs hourly and, for each person whose local time is 3 a.m., condenses up to 50 new notes into short facts with the person's chosen model. Each dreamed fact records the notes it came from. Dreaming can replace an inferred fact, never an explicit one.
 - **`/memory`** lists facts with where they came from, searches everything, and lets the person correct or forget one item, forget everything, or dream now.
 
-Forgetting erases the text in Pidge's database, along with the notes a fact was built from and any fact dreamed from a forgotten note. Pidge also refuses to re-infer the exact text of something forgotten. It does not erase Eve conversation history or provider logs. Pidge refuses to store text that looks like a password, code, key, or card number. See [D17](docs/decisions.md#d17-searchable-memory-and-dreaming-in-postgresql).
+Forgetting erases the text in Pidge's database, across the complete connected provenance component, including old sources and sibling inferences. Pidge also refuses to re-infer the exact text of something forgotten. It does not erase Eve conversation history or provider logs. Heuristic checks refuse common password, code, key, and card patterns; they cannot identify every secret. Automatic notes and dreamed facts remain unconfirmed data. Dreaming leases a user’s batch before calling the model. Recall replay reuses references to its original items; if one was forgotten, the turn fails closed and needs a fresh message. See [D17](docs/decisions.md#d17-searchable-memory-and-dreaming-in-postgresql).
 
 ## Optional owner notifications
 

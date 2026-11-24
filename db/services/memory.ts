@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import type { Database } from "../client";
-import { memoryItems, settings } from "../schema";
+import { memoryDreamLeases, memoryItems, settings, user } from "../schema";
 
 /** Longest single memory, after whitespace is collapsed. */
 export const MEMORY_TEXT_MAX = 500;
@@ -31,6 +31,12 @@ export type SaveInput = Provenance & {
   sourceIds?: string[];
 };
 type Result<T> = ({ ok: true } & T) | { ok: false; error: string };
+class MemoryRefusal extends Error {}
+
+async function lockUser(tx: Tx, userId: string) {
+  await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
+}
+
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 const view = {
@@ -57,6 +63,7 @@ export function memoryHash(text: string): string {
 
 const SECRET_PATTERNS = [
   /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{25,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{15,})\b/,
+  /\b(?:AIza[0-9A-Za-z_-]{30,}|[sr]k_(?:live|test)_[0-9A-Za-z]{16,})\b/,
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
   /\b(?:password|passcode|passwd|pin|one[- ]time code|otp|2fa code|verification code|security code|cvv|api key|secret key|access token|bearer|ssn|social security)\b/i,
   /\b\d{3}-\d{2}-\d{4}\b/,
@@ -128,7 +135,23 @@ async function insertMemory(
       ),
     )
     .limit(1);
-  if (existing) return { ok: true, item: existing, duplicate: true };
+  if (existing) {
+    if (input.origin === "explicit" && existing.origin === "inferred") {
+      const [confirmed] = await db
+        .update(memoryItems)
+        .set({
+          origin: "explicit",
+          sourceIds: [],
+          channel: input.channel ?? null,
+          eveSessionId: input.eveSessionId ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(memoryItems.id, existing.id))
+        .returning(view);
+      return { ok: true, item: confirmed ?? existing, duplicate: true };
+    }
+    return { ok: true, item: existing, duplicate: true };
+  }
   const [active] = await db
     .select({ n: count() })
     .from(memoryItems)
@@ -160,7 +183,10 @@ async function insertMemory(
  * re-learn on its own (inferred) the exact text of something the person told it to forget.
  */
 export function saveMemory(db: Database, userId: string, input: SaveInput) {
-  return insertMemory(db, userId, input);
+  return db.transaction(async (tx) => {
+    await lockUser(tx, userId);
+    return insertMemory(tx, userId, input);
+  });
 }
 
 /** Active facts recalled every turn: explicit ones first, then newest. */
@@ -182,7 +208,7 @@ export async function searchMemory(
   db: Database,
   userId: string,
   query: string,
-  options: { limit?: number; tier?: "fact" | "note" } = {},
+  options: { limit?: number; offset?: number; tier?: "fact" | "note" } = {},
 ): Promise<MemoryView[]> {
   const q = normalizeMemory(query).slice(0, 200);
   const tsq = sql`nullif(replace(plainto_tsquery('english', ${q})::text, ' & ', ' | '), '')::tsquery`;
@@ -201,26 +227,31 @@ export async function searchMemory(
     .orderBy(
       q ? sql`ts_rank(${memoryItems.search}, coalesce(${tsq}, ''::tsquery)) desc` : desc(memoryItems.createdAt),
       desc(memoryItems.createdAt),
+      desc(memoryItems.id),
     )
-    .limit(options.limit ?? 10);
+    .limit(options.limit ?? 10)
+    .offset(options.offset ?? 0);
 }
 
 /** Everything the Memory page shows: active facts and the newest notes. */
-export async function listMemory(db: Database, userId: string) {
-  const [facts, notes] = await Promise.all([
+export async function listMemory(db: Database, userId: string, offset = 0) {
+  const [facts, notes, pending] = await Promise.all([
     db
       .select(view)
       .from(memoryItems)
       .where(and(eq(memoryItems.userId, userId), eq(memoryItems.tier, "fact"), eq(memoryItems.status, "active")))
       .orderBy(desc(memoryItems.createdAt)),
-    searchMemory(db, userId, "", { tier: "note", limit: 100 }),
+    searchMemory(db, userId, "", { tier: "note", limit: 100, offset }),
+    db
+      .select({ n: count() })
+      .from(memoryItems)
+      .where(and(eq(memoryItems.userId, userId), eq(memoryItems.tier, "note"), eq(memoryItems.status, "active"))),
   ]);
-  return { facts, notes };
+  return { facts, notes, pending: pending[0]?.n ?? 0 };
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const isMemoryId = (id: string) => UUID.test(id);
-const uuidArray = (ids: string[]) => sql`${`{${ids.filter(isMemoryId).join(",")}}`}::uuid[]`;
 
 /**
  * Forgets rows in one transaction: their text is erased (only the hash stays as a tombstone). Forgetting a fact also
@@ -228,37 +259,62 @@ const uuidArray = (ids: string[]) => sql`${`{${ids.filter(isMemoryId).join(",")}
  * nothing the person removed survives in a consolidated form.
  */
 async function forgetIn(tx: Tx, userId: string, ids: string[]): Promise<number> {
-  const arr = uuidArray(ids);
   const rows = await tx
+    .select({ id: memoryItems.id, sources: memoryItems.sourceIds })
+    .from(memoryItems)
+    .where(eq(memoryItems.userId, userId));
+  const ownedIds = new Set(rows.map((row) => row.id));
+  const closure = new Set(ids.filter((id) => ownedIds.has(id)));
+  if (!closure.size) return 0;
+  // The whole connected provenance component: ancestors, descendants, and siblings, within this user only.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const row of rows) {
+      if (closure.has(row.id) || row.sources.some((id) => closure.has(id))) {
+        for (const id of [row.id, ...row.sources].filter((id) => ownedIds.has(id))) {
+          if (!closure.has(id)) {
+            closure.add(id);
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+  const erased = await tx
     .update(memoryItems)
     .set({ status: "forgotten", content: null, updatedAt: new Date() })
     .where(
       and(
         eq(memoryItems.userId, userId),
         sql`${memoryItems.status} <> 'forgotten'`,
-        sql`(${memoryItems.id} = any(${arr})
-          or ${memoryItems.id} = any(select unnest(m.source_ids) from memory_items m where m.user_id = ${userId} and m.id = any(${arr}))
-          or ${memoryItems.sourceIds} && ${arr})`,
+        inArray(memoryItems.id, [...closure].filter(isMemoryId)),
       ),
     )
     .returning({ id: memoryItems.id });
-  return rows.length;
+  return erased.length;
 }
 
 /** Forgets one of this user's memories. Returns how many rows were erased (0 when the ID isn't theirs). */
 export function forgetMemory(db: Database, userId: string, id: string): Promise<number> {
   if (!isMemoryId(id)) return Promise.resolve(0);
-  return db.transaction((tx) => forgetIn(tx, userId, [id]));
+  return db.transaction(async (tx) => {
+    await lockUser(tx, userId);
+    return forgetIn(tx, userId, [id]);
+  });
 }
 
 /** Forgets every memory this user has. */
 export async function forgetAllMemory(db: Database, userId: string): Promise<number> {
-  const rows = await db
-    .update(memoryItems)
-    .set({ status: "forgotten", content: null, updatedAt: new Date() })
-    .where(and(eq(memoryItems.userId, userId), sql`${memoryItems.status} <> 'forgotten'`))
-    .returning({ id: memoryItems.id });
-  return rows.length;
+  return db.transaction(async (tx) => {
+    await lockUser(tx, userId);
+    const rows = await tx
+      .update(memoryItems)
+      .set({ status: "forgotten", content: null, updatedAt: new Date() })
+      .where(and(eq(memoryItems.userId, userId), sql`${memoryItems.status} <> 'forgotten'`))
+      .returning({ id: memoryItems.id });
+    return rows.length;
+  });
 }
 
 /** Replaces a wrong memory with the person's corrected text: the old one is forgotten, the new one is an explicit fact. */
@@ -272,17 +328,23 @@ export async function correctMemory(
   if (!isMemoryId(id)) return { ok: false, error: "No such memory." };
   const valid = validate(content);
   if (!valid.ok) return valid;
-  return db.transaction(async (tx) => {
-    if ((await forgetIn(tx, userId, [id])) === 0) return { ok: false as const, error: "No such memory." };
-    const saved = await insertMemory(tx, userId, {
-      ...provenance,
-      content: valid.text,
-      tier: "fact",
-      origin: "explicit",
-      sourceIds: [id],
+  try {
+    return await db.transaction(async (tx) => {
+      await lockUser(tx, userId);
+      if ((await forgetIn(tx, userId, [id])) === 0) return { ok: false as const, error: "No such memory." };
+      const saved = await insertMemory(tx, userId, {
+        ...provenance,
+        content: valid.text,
+        tier: "fact",
+        origin: "explicit",
+      });
+      if (!saved.ok) throw new MemoryRefusal(saved.error);
+      return { ok: true as const, item: saved.item };
     });
-    return saved.ok ? { ok: true as const, item: saved.item } : saved;
-  });
+  } catch (error) {
+    if (error instanceof MemoryRefusal) return { ok: false, error: error.message };
+    throw error;
+  }
 }
 
 export type DreamInput = {
@@ -303,76 +365,145 @@ export type DreamResult = { notes: number; added: number; superseded: number; re
  */
 export async function consolidateMemory(db: Database, userId: string, dream: Dreamer): Promise<DreamResult> {
   const result: DreamResult = { notes: 0, added: 0, superseded: 0, rejected: 0 };
-  const notes = await db
-    .select({ id: memoryItems.id, content: memoryItems.content, createdAt: memoryItems.createdAt })
-    .from(memoryItems)
-    .where(and(eq(memoryItems.userId, userId), eq(memoryItems.tier, "note"), eq(memoryItems.status, "active")))
-    .orderBy(asc(memoryItems.createdAt))
-    .limit(DREAM_BATCH);
-  if (notes.length === 0) return result;
-  const facts = await recallFacts(db, userId, MAX_ACTIVE_FACTS);
-  const proposal = await dream({
-    facts: facts.map((f) => ({ id: f.id, origin: f.origin, content: f.content ?? "" })),
-    notes: notes.map((n) => ({ id: n.id, content: n.content ?? "", createdAt: n.createdAt })),
+  const token = crypto.randomUUID();
+  const claimed = await db.transaction(async (tx) => {
+    await lockUser(tx, userId);
+    const [lease] = await tx
+      .insert(memoryDreamLeases)
+      .values({
+        userId,
+        token,
+        expiresAt: new Date(Date.now() + 5 * 60_000),
+      })
+      .onConflictDoUpdate({
+        target: memoryDreamLeases.userId,
+        set: { token, expiresAt: new Date(Date.now() + 5 * 60_000) },
+        setWhere: sql`${memoryDreamLeases.expiresAt} < now()`,
+      })
+      .returning();
+    return Boolean(lease);
   });
-
-  return db.transaction(async (tx) => {
-    const live = new Set(
-      (
-        await tx
-          .select({ id: memoryItems.id })
-          .from(memoryItems)
-          .where(
-            and(
-              eq(memoryItems.userId, userId),
-              eq(memoryItems.status, "active"),
-              inArray(
-                memoryItems.id,
-                notes.map((n) => n.id),
-              ),
+  if (!claimed) return result;
+  try {
+    const notes = await db
+      .select(view)
+      .from(memoryItems)
+      .where(and(eq(memoryItems.userId, userId), eq(memoryItems.tier, "note"), eq(memoryItems.status, "active")))
+      .orderBy(asc(memoryItems.createdAt))
+      .limit(DREAM_BATCH);
+    if (!notes.length) return result;
+    const facts = await recallFacts(db, userId, MAX_ACTIVE_FACTS);
+    const proposal = await dream({
+      facts: facts.map((f) => ({ id: f.id, origin: f.origin, content: f.content ?? "" })),
+      notes: notes.map((n) => ({ id: n.id, content: n.content ?? "", createdAt: n.createdAt })),
+    });
+    if (
+      proposal.facts.length > 20 ||
+      proposal.facts.some(
+        (f) =>
+          f.content.length > MEMORY_TEXT_MAX || f.sources.length > DREAM_BATCH || f.replaces.length > MAX_ACTIVE_FACTS,
+      )
+    )
+      throw new Error("Dream proposal exceeds bounds");
+    return await db.transaction(async (tx) => {
+      await lockUser(tx, userId);
+      const [lease] = await tx
+        .select()
+        .from(memoryDreamLeases)
+        .where(
+          and(
+            eq(memoryDreamLeases.userId, userId),
+            eq(memoryDreamLeases.token, token),
+            sql`${memoryDreamLeases.expiresAt} > now()`,
+          ),
+        );
+      if (!lease) return result;
+      const current = await tx
+        .select(view)
+        .from(memoryItems)
+        .where(
+          and(
+            eq(memoryItems.userId, userId),
+            inArray(
+              memoryItems.id,
+              [...notes, ...facts].map((m) => m.id),
             ),
-          )
-          .for("update")
-      ).map((r) => r.id),
-    );
-    if (live.size === 0) return result;
-    const replaceable = new Set(facts.filter((f) => f.origin === "inferred").map((f) => f.id));
-    for (const fact of proposal.facts) {
-      const replaces = fact.replaces.filter((id) => replaceable.has(id));
-      if (fact.sources.length === 0 || !fact.sources.every((id) => live.has(id))) {
-        result.rejected++;
-        continue;
+          ),
+        );
+      // A model can paraphrase ANY input, even without citing it. Invalidate the whole pass if an input changed.
+      if (
+        [...notes, ...facts].some(
+          (before) =>
+            !current.some(
+              (now) =>
+                now.id === before.id &&
+                now.status === before.status &&
+                now.origin === before.origin &&
+                now.content === before.content,
+            ),
+        )
+      ) {
+        return { ...result, rejected: proposal.facts.length };
       }
-      const saved = await insertMemory(tx, userId, {
-        content: fact.content,
-        tier: "fact",
-        origin: "inferred",
-        sourceIds: [...new Set([...fact.sources, ...replaces])],
-      });
-      if (!saved.ok || saved.duplicate) {
-        result.rejected += saved.ok ? 0 : 1;
-        continue;
+      const live = new Set(notes.map((n) => n.id));
+      const replaceable = new Set(facts.filter((f) => f.origin === "inferred").map((f) => f.id));
+      const retry = new Set<string>();
+      for (const fact of proposal.facts) {
+        const replaces = fact.replaces.filter((id) => replaceable.has(id));
+        if (!fact.sources.length || !fact.sources.every((id) => live.has(id))) {
+          result.rejected++;
+          for (const id of fact.sources.filter((id) => live.has(id))) retry.add(id);
+          continue;
+        }
+        try {
+          const applied = await tx.transaction(async (step) => {
+            // Release replacement capacity before insertion, rolling back both changes on refusal or duplicate.
+            const old = replaces.length
+              ? await step
+                  .update(memoryItems)
+                  .set({ status: "superseded", updatedAt: new Date() })
+                  .where(
+                    and(
+                      eq(memoryItems.userId, userId),
+                      eq(memoryItems.status, "active"),
+                      inArray(memoryItems.id, replaces),
+                    ),
+                  )
+                  .returning({ id: memoryItems.id })
+              : [];
+            const saved = await insertMemory(step, userId, {
+              content: fact.content,
+              tier: "fact",
+              origin: "inferred",
+              sourceIds: [...new Set([...fact.sources, ...replaces])],
+            });
+            if (!saved.ok) throw new MemoryRefusal(saved.error);
+            if (saved.duplicate && old.length) throw new MemoryRefusal("Replacement already exists");
+            return { saved, old };
+          });
+          result.added += applied.saved.duplicate ? 0 : 1;
+          result.superseded += applied.old.length;
+          for (const row of applied.old) replaceable.delete(row.id);
+        } catch (error) {
+          if (!(error instanceof MemoryRefusal)) throw error;
+          result.rejected++;
+          for (const id of fact.sources) retry.add(id);
+        }
       }
-      result.added++;
-      if (replaces.length > 0) {
-        const old = await tx
+      const consumed = notes.map((n) => n.id).filter((id) => !retry.has(id));
+      if (consumed.length)
+        await tx
           .update(memoryItems)
-          .set({ status: "superseded", updatedAt: new Date() })
-          .where(
-            and(eq(memoryItems.userId, userId), eq(memoryItems.status, "active"), inArray(memoryItems.id, replaces)),
-          )
-          .returning({ id: memoryItems.id });
-        result.superseded += old.length;
-        for (const r of old) replaceable.delete(r.id);
-      }
-    }
-    await tx
-      .update(memoryItems)
-      .set({ status: "consolidated", updatedAt: new Date() })
-      .where(and(eq(memoryItems.userId, userId), inArray(memoryItems.id, [...live])));
-    result.notes = live.size;
-    return result;
-  });
+          .set({ status: "consolidated", updatedAt: new Date() })
+          .where(and(eq(memoryItems.userId, userId), inArray(memoryItems.id, consumed)));
+      result.notes = consumed.length;
+      return result;
+    });
+  } finally {
+    await db
+      .delete(memoryDreamLeases)
+      .where(and(eq(memoryDreamLeases.userId, userId), eq(memoryDreamLeases.token, token)));
+  }
 }
 
 /** Whether it is {@link DREAM_HOUR} o'clock for someone in `timeZone`. */

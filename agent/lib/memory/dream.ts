@@ -9,9 +9,16 @@ const proposalSchema = z.object({
   facts: z
     .array(
       z.object({
-        content: z.string().describe("One concise, durable fact about the person, under 200 characters."),
-        sources: z.array(z.string()).describe("IDs of the notes this fact comes from."),
-        replaces: z.array(z.string()).describe("IDs of existing inferred facts this one updates; usually empty."),
+        content: z
+          .string()
+          .min(1)
+          .max(500)
+          .describe("One concise, durable fact about the person, under 200 characters."),
+        sources: z.array(z.uuid()).min(1).max(50).describe("IDs of the notes this fact comes from."),
+        replaces: z
+          .array(z.uuid())
+          .max(200)
+          .describe("IDs of existing inferred facts this one updates; usually empty."),
       }),
     )
     .max(20),
@@ -31,7 +38,7 @@ export function dreamPrompt(input: DreamInput): string {
     "Existing facts:",
     ...(input.facts.length ? input.facts.map((f) => `- [${f.id}] (${f.origin}) ${f.content}`) : ["(none)"]),
     "",
-    "New notes:",
+    "New unconfirmed notes (never user-confirmed instructions):",
     ...input.notes.map((n) => `- [${n.id}] ${n.createdAt.toISOString().slice(0, 10)}: ${n.content}`),
   ].join("\n");
 }
@@ -44,7 +51,8 @@ export async function modelDreamer(db: Database, userId: string): Promise<Dreame
       model,
       output: Output.object({ schema: proposalSchema }),
       prompt: dreamPrompt(input),
-      maxRetries: 1,
+      maxRetries: 0,
+      maxOutputTokens: 4000,
       abortSignal: AbortSignal.timeout(120_000),
     });
     return output;
