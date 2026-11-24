@@ -89,14 +89,18 @@ function ForgetButton({ id }: { id: string }) {
   );
 }
 
-export default async function MemoryPage({ searchParams }: { searchParams: Promise<{ q?: string; error?: string }> }) {
+export default async function MemoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; error?: string; offset?: string }>;
+}) {
   const user = await requireUser("/memory");
-  const { q = "", error } = await searchParams;
-  const [{ facts, notes }, results] = await Promise.all([
-    listMemory(db(), user.id),
+  const { q = "", error, offset: rawOffset = "0" } = await searchParams;
+  const offset = Math.max(0, Math.min(100000, Number.parseInt(rawOffset, 10) || 0));
+  const [{ facts, notes, pending }, results] = await Promise.all([
+    listMemory(db(), user.id, offset),
     q.trim() ? searchMemory(db(), user.id, q, { limit: 25 }) : Promise.resolve(null),
   ]);
-  const pending = notes.filter((n) => n.status === "active").length;
   return (
     <>
       <section className="panel">
@@ -119,7 +123,7 @@ export default async function MemoryPage({ searchParams }: { searchParams: Promi
             <ul>
               {results.map((item) => (
                 <li key={item.id}>
-                  {item.content} <Meta item={item} />
+                  {item.content} <Meta item={item} /> <ForgetButton id={item.id} />
                 </li>
               ))}
             </ul>
@@ -151,7 +155,7 @@ export default async function MemoryPage({ searchParams }: { searchParams: Promi
       <section className="panel">
         <h3 style={{ marginTop: 0 }}>Notes</h3>
         <p className="muted">
-          Things Pidge noticed. {pending} waiting for dreaming. Showing the newest {notes.length}.
+          Things Pidge noticed. {pending} waiting for dreaming. Showing {offset + 1}–{offset + notes.length}.
         </p>
         <form action={dreamNow}>
           <button type="submit" disabled={pending === 0}>
@@ -168,6 +172,8 @@ export default async function MemoryPage({ searchParams }: { searchParams: Promi
             </li>
           ))}
         </ul>
+        {offset > 0 ? <a href={`/memory?offset=${Math.max(0, offset - 100)}`}>Newer notes</a> : null}{" "}
+        {notes.length === 100 ? <a href={`/memory?offset=${offset + 100}`}>Older notes</a> : null}
       </section>
 
       <section className="panel">

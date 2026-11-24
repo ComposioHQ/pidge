@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { customType, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { customType, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
 const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
@@ -36,7 +36,17 @@ export const memoryItems = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    uniqueIndex("memory_items_active_text").on(t.userId, t.tier, t.contentHash).where(sql`${t.status} = 'active'`),
     index("memory_items_user").on(t.userId, t.tier, t.status),
     index("memory_items_search").using("gin", t.search),
   ],
 );
+
+/** A short lease prevents concurrent manual/hourly dreams from paying for the same batch. */
+export const memoryDreamLeases = pgTable("memory_dream_leases", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  token: uuid("token").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
